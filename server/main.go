@@ -54,7 +54,14 @@ func startServer() {
 			return
 		}
 
-		c.File(fullPath)
+		// 设置正确的 Content-Length
+		c.Header("Content-Length", fmt.Sprintf("%d", info.Size()))
+		
+		// 禁用 gin 的 Content-Length 自动设置
+		c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
+		
+		// 直接使用 http.ServeFile 而不是 c.File
+		http.ServeFile(c.Writer, c.Request, fullPath)
 	})
 
 	// 处理目录下载（返回目录结构）
@@ -73,13 +80,25 @@ func startServer() {
 			return
 		}
 
-		var files []string
+		var files []struct {
+			Path string `json:"path"`
+			Size int64  `json:"size"`
+		}
+
 		err = filepath.Walk(fullPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 			relPath, _ := filepath.Rel(absPath, path)
-			files = append(files, relPath)
+			if !info.IsDir() {
+				files = append(files, struct {
+					Path string `json:"path"`
+					Size int64  `json:"size"`
+				}{
+					Path: relPath,
+					Size: info.Size(),
+				})
+			}
 			return nil
 		})
 
